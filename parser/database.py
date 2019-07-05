@@ -11,7 +11,7 @@ class ReviewModel(Base):
     id = Column(Integer, primary_key=True)
     author_id = Column(String)
     author_name = Column(String)
-    author_profession = Column(String)
+    author_profession = Column(SmallInteger)
     stars = Column(SmallInteger)
     datetime = Column(TIMESTAMP)
     text = Column(String)

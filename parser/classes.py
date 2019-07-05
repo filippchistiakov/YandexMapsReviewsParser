@@ -2,7 +2,9 @@ from selenium.common.exceptions import (
     NoSuchElementException,
 )
 from datetime import datetime
+import pytz
 
+utc = pytz.timezone("UTC")
 
 # Это класс, с отзывом.
 class Review(object):
@@ -86,7 +88,7 @@ class Review(object):
                     './/*[@class="business-review-view__date"]//meta[@itemprop="datePublished"]'
                 ).get_attribute("content"),
                 "%Y-%m-%dT%H:%M:%S.%fZ",
-            )
+            ).astimezone(utc)
         except NoSuchElementException:
             pass
         try:
