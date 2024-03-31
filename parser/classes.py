@@ -1,137 +1,127 @@
 from selenium.common.exceptions import (
     NoSuchElementException,
 )
-from datetime import datetime
-import pytz
+from selenium.webdriver.common.by import By
+from selenium.webdriver.remote.webelement import WebElement
 
-utc = pytz.timezone("UTC")
+import logging
 
-# Это класс, с отзывом.
-class Review(object):
+logger = logging.getLogger(__name__)
+
+
+def try_get_child_elem_by_xpath(
+        parent_element: WebElement, value: str
+) -> WebElement or None:
+    found_elem = parent_element.find_elements(
+        by=By.XPATH, value=value
+    )
+    logger.debug(
+        f"{len(found_elem)=} {value} {parent_element.get_attribute('outerHTML')=}"
+    )
+    return found_elem[0] if found_elem else None
+
+
+def try_found_elem_if_exist_return_attr(
+        parent_element: WebElement or None,
+        value: str,
+        attribute: str,
+) -> str or None:
+    if parent_element:  # is WebElement
+        return parent_element.get_attribute(attribute)
+
+
+def try_found_elem_if_exist_return_text(
+        parent_element: WebElement or None, value: str
+) -> str or None:
+    if parent_element:
+        return parent_element.text
+
+
+def get_dict_from_meta(
+        parent_element: WebElement, value: str
+) -> dict:
+    return {
+        meta.get_attribute("itemprop"): [
+            meta.get_attribute("content"),
+            meta.text,
+        ]
+        for meta in parent_element.find_elements(
+            By.XPATH, value
+        )
+    }
+
+
+class Review(WebElement):
     "class for reviews"
 
-    # Вывод словаря атрибутов
     def __repr__(self):
         return repr(self.__dict__)
 
-    # Расчет рейтинга
-    def star_count(self, element):
-        default_count = 0
-        for star in element.find_elements_by_xpath(
-            './/*[@class="business-rating-badge-view__stars"]/.//span'
-        ):
-            if "empty" not in star.get_attribute("class"):
-                default_count += 1
-        return default_count
+    def __init__(self):
+        pass
 
-    # Проверка наличия ответа на отзыв.
-    def check_business_response(self, element):
-        try:
-            business_review = element.find_element_by_xpath(
-                './/*[@class="business-review-view__comment"]'
+    def parse_base_information(
+            self, review_elem: WebElement
+    ):
+        self.selenium_id = review_elem.id
+        self.datetime = get_dict_from_meta(
+            review_elem,
+            './/*[@class="business-review-view__date"]//*',
+        )
+        self.review_rating = get_dict_from_meta(
+            review_elem,
+            './/*[@itemtype="http://schema.org/Rating"]//*',
+        )
+        self.author = get_dict_from_meta(
+            review_elem,
+            './/*[@itemtype="http://schema.org/Person"]//*',
+        )
+        self.author_url = (
+            try_found_elem_if_exist_return_attr(
+                review_elem,
+                './/*[@class="business-review-view__link"]',
+                "href",
             )
-            business_review.click()
-            return BusinessResponse(business_review)
-        except NoSuchElementException:
-            return BusinessResponse(None)
+        )
+        self.review_text = try_found_elem_if_exist_return_text(
+            review_elem,
+            './/*[@class="business-review-view__body-text"]',
+        )
+        self.like = try_found_elem_if_exist_return_text(
+            review_elem,
+            './/*[@class="business-reactions-view__icon"]/following-sibling::*',
+        )
+        self.dislike = try_found_elem_if_exist_return_text(
+            review_elem,
+            './/*[@class="business-reactions-view__icon _dislike"]/following-sibling::*',
+        )
 
-    # Основная ф-ция инициализации, которая принимает <selenium.webdriver.firefox.webelement.FirefoxWebElement> на вход с отзывом
-    def __init__(self, element):
+    def try_add_responce(self, review_elem, driver):
+        self.is_a_response = False
         try:
-            # ID автора
-            self.author_id = (
-                element.find_element_by_css_selector(
-                    "a.user-icon-view"
-                )
-                .get_attribute("href")
-                .replace("https://yandex.ru/ugcpub/pk/", "")
-                .replace("http://yandex.ru/ugcpub/pk/", "")
+            elem_comment_expand = review_elem.find_element(
+                by=By.XPATH,
+                value='.//*[@class="business-review-view__comment-expand"]',
             )
-            # self.author_id = (
-            #     element.find_element_by_xpath('.//*[@class="user-icon-view"]')
-            #         .get_attribute("href")
-            #         .replace("https://yandex.ru/ugcpub/pk/", "")
-            #         .replace("http://yandex.ru/ugcpub/pk/", "")
-            # )
-        except NoSuchElementException:
-            pass
-        try:
-            # Имя пользователя
-            self.author_name = element.find_element_by_xpath(
-                './/*[@class="business-review-view__author"]/.//span'
-            ).text
-        except NoSuchElementException:
-            pass
-        try:
-            # Уровень пользователя
-            self.author_profession = int(
-                "".join(
-                    filter(
-                        str.isdigit,
-                        element.find_element_by_xpath(
-                            './/*[@class="business-review-view__author-profession"]'
-                        ).text,
-                    )
-                )
+            driver.execute_script(
+                "arguments[0].scrollIntoView(true);",
+                elem_comment_expand,
+            )
+            driver.execute_script(
+                "arguments[0].click();", elem_comment_expand
+            )
+            self.is_a_response = True
+            self.response_datetime = try_found_elem_if_exist_return_text(
+                review_elem,
+                './/*[@class="business-review-comment-content__date"]',
+            )
+            self.response_text = try_found_elem_if_exist_return_text(
+                review_elem,
+                './/*[@class="business-review-comment-content__bubble"]',
             )
         except NoSuchElementException:
             pass
-        try:
-            # Оценка пользователя
-            self.stars = self.star_count(element)
-        except NoSuchElementException:
-            pass
-        try:
-            # Дата и время отправки отзыва !!!ПРОВЕРИТЬ ТАЙМЗОНУ!!!
-            self.datetime = datetime.strptime(
-                element.find_element_by_xpath(
-                    './/*[@class="business-review-view__date"]//meta[@itemprop="datePublished"]'
-                ).get_attribute("content"),
-                "%Y-%m-%dT%H:%M:%S.%fZ",
-            ).astimezone(utc)
-        except NoSuchElementException:
-            pass
-        try:
-            self.text = element.find_element_by_xpath(
-                './/*[@class="business-review-view__body"]'
-            ).text.replace("\n", "")
-        except NoSuchElementException:
-            pass
-        try:
-            self.like = int(
-                element.find_element_by_xpath(
-                    './/*[@class="business-reactions-view__icon"]/following-sibling::*'
-                ).text
-            )
-        except NoSuchElementException:
-            self.like = 0
-        try:
-            self.dislike = int(
-                element.find_element_by_xpath(
-                    './/*[@class="business-reactions-view__icon _dislike"]/following-sibling::*'
-                ).text
-            )
-        except NoSuchElementException:
-            self.dislike = 0
-        try:
-            business_review = element.find_element_by_xpath(
-                './/*[@class="business-review-view__comment"]'
-            )
-            business_review.click()
 
-            self.response_flag = True
-            # Название организации
-            self.response_title = element.find_element_by_xpath(
-                './/*[@class="business-review-view__comment-title"]'
-            ).text
-            # Дата и время отправки отзыва !!!ПРОВЕРИТЬ ТАЙМЗОНУ!!!
-            self.response_datetime = element.find_element_by_xpath(
-                './/*[@class="business-review-view__date _org-answer"]'
-            ).text
-            self.response_text = element.find_element_by_xpath(
-                './/*[@class="business-review-view__body _org-answer"]'
-            ).text.replace(
-                "\n", ""
-            )
-        except NoSuchElementException:
-            pass
+
+if __name__ == '__main__':
+    pass
