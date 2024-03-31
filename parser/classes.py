@@ -23,7 +23,6 @@ def try_get_child_elem_by_xpath(
 
 def try_found_elem_if_exist_return_attr(
         parent_element: WebElement or None,
-        value: str,
         attribute: str,
 ) -> str or None:
     if parent_element:  # is WebElement
@@ -31,7 +30,7 @@ def try_found_elem_if_exist_return_attr(
 
 
 def try_found_elem_if_exist_return_text(
-        parent_element: WebElement or None, value: str
+        parent_element: WebElement or None
 ) -> str or None:
     if parent_element:
         return parent_element.text
@@ -51,14 +50,28 @@ def get_dict_from_meta(
     }
 
 
-class Review(WebElement):
-    "class for reviews"
+class Review:
+    """class for reviews"""
 
     def __repr__(self):
         return repr(self.__dict__)
 
-    def __init__(self):
-        pass
+    def __init__(self, **kwargs):
+
+        self.response_text = None
+        self.response_datetime = None
+        self.is_a_response = True
+        self.dislike = None
+        self.like = None
+        self.review_text = None
+        self.author_url = None
+        self.author = None
+        self.review_rating = None
+        self.datetime = None
+        self.selenium_id = None
+
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
     def parse_base_information(
             self, review_elem: WebElement
@@ -79,24 +92,20 @@ class Review(WebElement):
         self.author_url = (
             try_found_elem_if_exist_return_attr(
                 review_elem,
-                './/*[@class="business-review-view__link"]',
                 "href",
             )
         )
         self.review_text = try_found_elem_if_exist_return_text(
             review_elem,
-            './/*[@class="business-review-view__body-text"]',
         )
         self.like = try_found_elem_if_exist_return_text(
             review_elem,
-            './/*[@class="business-reactions-view__icon"]/following-sibling::*',
         )
         self.dislike = try_found_elem_if_exist_return_text(
             review_elem,
-            './/*[@class="business-reactions-view__icon _dislike"]/following-sibling::*',
         )
 
-    def try_add_responce(self, review_elem, driver):
+    def try_add_response(self, review_elem, driver):
         self.is_a_response = False
         try:
             elem_comment_expand = review_elem.find_element(
@@ -110,14 +119,11 @@ class Review(WebElement):
             driver.execute_script(
                 "arguments[0].click();", elem_comment_expand
             )
-            self.is_a_response = True
             self.response_datetime = try_found_elem_if_exist_return_text(
                 review_elem,
-                './/*[@class="business-review-comment-content__date"]',
             )
             self.response_text = try_found_elem_if_exist_return_text(
                 review_elem,
-                './/*[@class="business-review-comment-content__bubble"]',
             )
         except NoSuchElementException:
             pass
