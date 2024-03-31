@@ -1,4 +1,4 @@
-# parser_reviews_yandex_maps
+# YandexMapsReviewsParser
 
 Парсер отзывов с Янжекс Карт.
 
